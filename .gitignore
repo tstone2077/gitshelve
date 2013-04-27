@@ -1,5 +1,5 @@
 *.pyc
 .coverage
-/coverage.xml
+tests/coverage.xml
 virtualenv/py*
 sonar-project.properties

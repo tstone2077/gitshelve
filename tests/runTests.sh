@@ -2,7 +2,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PYTHON2=$(which python2)
 PYTHON3=$(which python3)
-VIRTUAL_ENV_DIR=$SCRIPT_DIR/virtualenv
+VIRTUAL_ENV_DIR=$SCRIPT_DIR/../virtualenv
 TEST_ROOT_FILE=$SCRIPT_DIR/t_gitshelve.py
 
 if [ -n "$PYTHON2" ]; then
@@ -55,5 +55,5 @@ fi
 
 if [ -z $1 ]; then
     coverage report -m --omit=*t_*.py
-    coverage xml -i
+    coverage xml -i -o $SCRIPT_DIR/coverage.xml
 fi

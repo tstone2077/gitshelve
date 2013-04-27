@@ -13,9 +13,9 @@ except:
     from io import StringIO
 
 dirName = os.path.dirname(__file__)
-parentDir = (os.path.abspath(os.path.join(dirName,"..")))
-if parentDir not in sys.path:
-    sys.path.insert(0,parentDir)
+gitshelveDir = (os.path.abspath(os.path.join(dirName,'..','src')))
+if gitshelveDir not in sys.path:
+    sys.path.insert(0,gitshelveDir)
 import gitshelve
 
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
