@@ -221,20 +221,34 @@ class gitshelve(dict):
             self.git('update-ref', 'refs/heads/%s' % self.branch, new_head)
         self.head = new_head
 
+    def __parse_ls_tree_line(self,treep,perm,name,path):
+        parts = path.split(os.sep)
+        d = self.objects
+        for part in parts:
+            if not part in d:
+                d[part] = {}
+            d = d[part]
+
+        if treep:
+            d['__root__'] = name
+        else:
+            if perm == '100644':
+                d['__book__'] = self.book_type(self, path, name)
+            else:
+                raise GitError('read_repository', [], {},
+                       'Invalid mode for %s : 100644 required, %s found' \
+                            % (path, perm))
+
     def read_repository(self):
         self.init_data()
         try:
             self.head = self.current_head()
         except:
-            self.head = None
-
-        if not self.head:
             return
 
-        ls_tree = self.git('ls-tree', '--full-tree','-r', '-t', '-z', self.head).split('\0')
+        ls_tree = self.git('ls-tree', '--full-tree','-r', '-t', '-z', 
+                           self.head).split('\0')
         for line in ls_tree:
-            if not line:
-                continue
             match = self.ls_tree_pat.match(line)
             if not match:
                 raise ValueError("ls-tree went insane: %s" % line)
@@ -243,28 +257,7 @@ class gitshelve(dict):
             perm = match.group(2)
             name = match.group(4)
             path = match.group(5)
-
-            parts = path.split(os.sep)
-            d = self.objects
-            for part in parts:
-                if not part in d:
-                    d[part] = {}
-                d = d[part]
-
-            if treep:
-                if perm == '040000':
-                    d['__root__'] = name
-                else:
-                    raise GitError('read_repository', [], {},
-                           'Invalid mode for %s : 040000 required, %s found' \
-                                   % (path, perm))
-            else:
-                if perm == '100644':
-                    d['__book__'] = self.book_type(self, path, name)
-                else:
-                    raise GitError('read_repository', [], {},
-                           'Invalid mode for %s : 100644 required, %s found' \
-                                % (path, perm))
+            self.__parse_ls_tree_line(treep,perm,name,path)
 
     def open(cls, branch='master', repository=None,
              keep_history=True, book_type=gitbook):
@@ -283,12 +276,10 @@ class gitshelve(dict):
     def make_blob(self, data):
         return self.git('hash-object', '-w', '--stdin', input=data)
 
-    def make_tree(self, objects, comment_accumulator=None):
+    def make_tree(self, objects):
         buf = StringIO()
 
-        root = None
-        if '__root__' in objects:
-            root = objects['__root__']
+        root = objects.get('__root__')
 
         for path in list(objects.keys()):
             if path == '__root__':
@@ -301,21 +292,16 @@ class gitshelve(dict):
             if len(list(obj.keys())) == 1 and '__book__' in obj:
                 book = obj['__book__']
                 if book.dirty:
-                    comment = book.change_comment()
-                    if comment_accumulator and comment:
-                            comment_accumulator.write(comment)
-
                     book.name = self.make_blob(book.serialize_data(book.data))
                     book.dirty = False
                     root = None
                 buf.write("100644 blob %s\t%s\0" % (book.name, path))
-
             else:
                 tree_root = None
                 if '__root__' in obj:
                     tree_root = obj['__root__']
 
-                tree_name = self.make_tree(obj, comment_accumulator)
+                tree_name = self.make_tree(obj)
                 if tree_name != tree_root:
                     root = None
 
@@ -344,15 +330,9 @@ class gitshelve(dict):
         if not self.dirty:
             return self.head
 
-        accumulator = None
-        if comment is None:
-            accumulator = StringIO()
-
         # Walk the objects now, creating and nesting trees until we end up
         # with a top-level tree.  We then create a commit out of this tree.
-        tree = self.make_tree(self.objects, accumulator)
-        if accumulator:
-            comment = accumulator.getvalue()
+        tree = self.make_tree(self.objects)
         name = self.make_commit(tree, comment)
 
         self.dirty = False
@@ -374,7 +354,7 @@ class gitshelve(dict):
         if objects is None:
             objects = self.objects
 
-        if ('__root__' in objects) and indent == 0:
+        if '__root__' in objects and indent == 0:
             data = '%stree %s\n' % (" " * indent, objects['__root__'])
             data.encode('utf-8')
             fd.write('%stree %s\n' % (" " * indent, objects['__root__']))
@@ -383,27 +363,31 @@ class gitshelve(dict):
         keys = list(objects.keys())
         keys.sort()
         for key in keys:
-            if key == '__root__':
-                continue
-            if not isinstance(objects[key], dict):
-                raise TypeError("objects['%s'] is not a dict"%key)
+            indent = self.processKeys(fd,indent,objects,key)
 
-            if ('__book__' in objects[key]):
-                book = objects[key]['__book__']
-                if book.name:
-                    kind = 'blob ' + book.name
-                else:
-                    kind = 'blob'
+    def processKeys(self,fd,indent,objects,key):
+        if key == '__root__':
+            return indent
+        if not isinstance(objects[key], dict):
+            raise TypeError("objects['%s'] is not a dict"%key)
+
+        if ('__book__' in objects[key]):
+            book = objects[key]['__book__']
+            if book.name:
+                kind = 'blob ' + book.name
             else:
-                if ('__root__' in objects[key]):
-                    kind = 'tree ' + objects[key]['__root__']
-                else:
-                    kind = 'tree'
+                kind = 'blob'
+        else:
+            if ('__root__' in objects[key]):
+                kind = 'tree ' + objects[key]['__root__']
+            else:
+                kind = 'tree'
 
-            fd.write('%s%s: %s\n' % (" " * indent, kind, key))
+        fd.write('%s%s: %s\n' % (" " * indent, kind, key))
 
-            if kind[:4] == 'tree':
-                self.dump_objects(fd, indent + 2, objects[key])
+        if kind[:4] == 'tree':
+            self.dump_objects(fd, indent + 2, objects[key])
+        return indent
 
     def get_tree(self, path, make_dirs=False):
         parts = path.split(os.sep)

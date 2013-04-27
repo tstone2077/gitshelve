@@ -249,10 +249,9 @@ class t_gitshelve(unittest.TestCase):
         b = gitshelve.gitbook(s, self.gitDir, name=name)
         b.dirty = True
         objects['file'] = {'__book__':b}
-        buf = StringIO()
-        tree = s.make_tree(objects,buf)
+        tree = s.make_tree(objects)
         objects[tree] = {'file':{'__book__':b}}
-        newTree = s.make_tree(objects,buf)
+        newTree = s.make_tree(objects)
         s.close()
 
     def testGitshelveMakeCommit(self):
@@ -264,7 +263,7 @@ class t_gitshelve(unittest.TestCase):
         b.dirty = True
         objects['file'] = {'__book__':b}
         buf = StringIO()
-        tree = s.make_tree(objects,buf)
+        tree = s.make_tree(objects)
         comment = 'tree'
         s.make_commit(tree, comment)
         s.make_commit(tree, None)
