@@ -43,10 +43,6 @@ from subprocess import Popen, PIPE
 
 ######################################################################
 
-verbose = False
-
-######################################################################
-
 # Utility function for calling out to Git (this script does not try to
 # be a Git library, just an interface to the underlying commands).  It
 # supports a 'restart' keyword, which will cause a Python function to
@@ -79,73 +75,55 @@ class GitError(Exception):
             errorMsg += " %s"%(self.stderr)
         return errorMsg
 
+def __set_repo_environ(environ,repository):
+    if repository is not None:
+        git_dir = environ['GIT_DIR'] = repository
+        if not os.path.isdir(git_dir):
+            proc = Popen(('git', 'init'), env=environ,
+                         stdout=PIPE, stderr=PIPE)
+            if proc.wait() != 0:
+                raise GitError('init', [], {}, proc.stderr.read())
+
+def __set_worktree_environ(environ,worktree):
+    if worktree is not None:
+        environ['GIT_WORK_TREE'] = worktree
+        if not os.path.isdir(worktree):
+            os.makedirs(worktree)
+
 def git(cmd, *args, **kwargs):
-    restart = True
-    while restart:
-        stdin_mode = None
-        if 'input' in kwargs:
-            stdin_mode = PIPE
+    stdin_mode = None
+    if 'input' in kwargs:
+        stdin_mode = PIPE
 
-        if verbose:
-            print("Command: git %s %s" % (cmd, ' '.join(args)))
-            if 'input' in kwargs:
-                print("Input: <<EOF")
-                print(kwargs['input'])
-                print("EOF")
+    environ = os.environ.copy()
+    __set_repo_environ(environ,kwargs.get('repository'))
+    __set_worktree_environ(environ, kwargs.get('worktree'))
 
-        environ = None
-        if 'repository' in kwargs:
-            environ = os.environ.copy()
-            environ['GIT_DIR'] = kwargs['repository']
+    proc = Popen(('git', cmd) + args, env=environ,
+                 stdin=stdin_mode,
+                 stdout=PIPE,
+                 stderr=PIPE)
 
-            git_dir = environ['GIT_DIR']
-            if not os.path.isdir(git_dir):
-                proc = Popen(('git', 'init'), env=environ,
-                             stdout=PIPE, stderr=PIPE)
-                if proc.wait() != 0:
-                    raise GitError('init', [], {}, proc.stderr.read())
+    input = kwargs.get('input','')
+    if isinstance(input, str):
+        input = input.encode("utf-8")
+    out, err = proc.communicate(input)
 
-        if 'worktree' in kwargs:
-            if environ is None:
-                environ = os.environ.copy()
-            environ['GIT_WORK_TREE'] = kwargs['worktree']
-            work_tree = environ['GIT_WORK_TREE']
-            if not os.path.isdir(work_tree):
-                os.makedirs(work_tree)
+    returncode = proc.returncode
+    restart = False
+    ignore_errors = kwargs.get('ignore_errors',False)
+    if returncode != 0 and not ignore_errors:
+            raise GitError(cmd, args, kwargs, err, returncode)
 
-        proc = Popen(('git', cmd) + args, env=environ,
-                     stdin=stdin_mode,
-                     stdout=PIPE,
-                     stderr=PIPE)
-
-        if 'input' in kwargs:
-            input = kwargs['input']
-        else:
-            input = ''
-
-        if isinstance(input, str):
-            input = input.encode("utf-8")
-        out, err = proc.communicate(input)
-
-        returncode = proc.returncode
-        restart = False
-        ignore_errors = 'ignore_errors' in kwargs and kwargs['ignore_errors']
-        if returncode != 0:
-            if 'restart' in kwargs:
-                if kwargs['restart'](cmd, args, kwargs):
-                    restart = True
-            elif not ignore_errors:
-                raise GitError(cmd, args, kwargs, err, returncode)
-
-    if not 'ignore_output' in kwargs:
-        if 'keep_newline' in kwargs:
-            retval = out
-        else:
-            retval = out[:-1]
     try:
-        return str(retval,"utf-8")
+        retval = str(out,'utf-8')
     except TypeError:
-        return unicode(retval)
+        retval = unicode(out)
+
+    if 'keep_newline' not in kwargs:
+        retval = retval[:-1]
+
+    return retval
 
 
 class gitbook:
@@ -165,7 +143,7 @@ class gitbook:
     def get_data(self):
         if self.data is None:
             if self.name is None:
-                raise ValueError("name and data re both None")
+                raise ValueError("name and data are both None")
             self.data = self.deserialize_data(self.shelf.get_blob(self.name))
         return self.data
 
@@ -233,10 +211,7 @@ class gitshelve(dict):
         return git(*args, **kwargs)
 
     def current_head(self):
-        x = self.git('rev-parse', self.branch)
-        if len(x) != 40:
-            raise ValueError("rev-parse went insane: %s" % x)
-        return x
+        return self.git('rev-parse', self.branch)
 
     def update_head(self, new_head):
         if self.head:
@@ -326,17 +301,13 @@ class gitshelve(dict):
             if len(list(obj.keys())) == 1 and '__book__' in obj:
                 book = obj['__book__']
                 if book.dirty:
-                    #"""change_comment is alwyas None, so this block does nothing
-                    if comment_accumulator:
-                        comment = book.change_comment()
-                        if comment:
+                    comment = book.change_comment()
+                    if comment_accumulator and comment:
                             comment_accumulator.write(comment)
-                    #"""
 
                     book.name = self.make_blob(book.serialize_data(book.data))
                     book.dirty = False
                     root = None
-
                 buf.write("100644 blob %s\t%s\0" % (book.name, path))
 
             else:
@@ -429,10 +400,7 @@ class gitshelve(dict):
                 else:
                     kind = 'tree'
 
-            try:
-                fd.write('%s%s: %s\n' % (" " * indent, kind, key))
-            except TypeError:
-                fd.write(unicode('%s%s: %s\n' % (" " * indent, kind, key)))
+            fd.write('%s%s: %s\n' % (" " * indent, kind, key))
 
             if kind[:4] == 'tree':
                 self.dump_objects(fd, indent + 2, objects[key])
@@ -446,6 +414,31 @@ class gitshelve(dict):
             d = d[part]
         return d
 
+    def get(self, key):
+        path = '%s/%s' % (key[:2], key[2:])
+        d = None
+        try:
+            d = self.get_tree(path)
+        except KeyError:
+            raise KeyError(key)
+        if not d or not ('__book__' in d):
+            raise KeyError(key)
+        return d['__book__'].get_data()
+
+    def put(self, data):
+        book = self.book_type(self, '__unknown__')
+        book.data = data
+        book.name = self.make_blob(book.serialize_data(book.data))
+        book.dirty = False      # the blob was just written!
+        book.path = '%s/%s' % (book.name[:2], book.name[2:])
+
+        d = self.get_tree(book.path, make_dirs=True)
+        d.clear()
+        d['__book__'] = book
+        self.dirty = True
+
+        return book.name
+
     def __getitem__(self, path):
         d = None
         try:
@@ -453,14 +446,14 @@ class gitshelve(dict):
         except KeyError:
             raise KeyError(path)
 
-        if d and ('__book__' in d):
+        if d is not None and '__book__' in d:
             return d['__book__'].get_data()
         else:
             raise KeyError(path)
 
     def __setitem__(self, path, data):
         d = self.get_tree(path, make_dirs=True)
-        if not ('__book__' in d):
+        if '__book__' not in d:
             d.clear()
             d['__book__'] = self.book_type(self, path)
         d['__book__'].set_data(data)

@@ -163,6 +163,10 @@ class t_gitshelve(unittest.TestCase):
                          '<gitshelve.gitbook %s %s False>'%(self.gitDir,name))
         data = 'temp'
         self.assertEqual(data,b.get_data())
+        b.data = None
+        b.name = None
+        with self.assertRaises(ValueError):
+            b.get_data()
         b.set_data(data)
         self.assertEqual(data,b.get_data())
         self.assertEqual(data,b.serialize_data(data))
@@ -413,12 +417,15 @@ class t_gitshelve(unittest.TestCase):
         s['temp3'] = 'temp'
         sStr = pickle.dumps(s)
         s = pickle.loads(sStr)
+        #change the head
+        s['temp4'] = 'temp'
+        s.commit()
+        s = pickle.loads(sStr)
         s.close()
 
     def testOpen(self):
         s = gitshelve.open()
 
-class OldTests:
     def testBasicInsertion(self):
         shelf = gitshelve.open('test')
         text = "Hello, this is a test\n"
@@ -653,11 +660,13 @@ class NoStdStreams(object):
 
     def __enter__(self):
         self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
-        self.old_stdout.flush(); self.old_stderr.flush()
+        self.old_stdout.flush()
+        self.old_stderr.flush()
         sys.stdout, sys.stderr = self._stdout, self._stderr
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._stdout.flush(); self._stderr.flush()
+        self._stdout.flush()
+        self._stderr.flush()
         sys.stdout = self.old_stdout
         sys.stderr = self.old_stderr
         self.devnull.close()
