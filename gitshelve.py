@@ -30,16 +30,17 @@
 # If you checkout the 'mydata' branch now, you'll see the file 'git.c' in the
 # directory 'foo/bar'.  Running 'git log' will show the change you made.
 
-import re
 import os
 from pipes import quote
+import re
+from subprocess import Popen, PIPE
+
 
 try:
     from StringIO import StringIO
-except:
+except ImportError:
     from io import StringIO
 
-from subprocess import Popen, PIPE
 
 ######################################################################
 
@@ -54,7 +55,7 @@ from subprocess import Popen, PIPE
 
 
 class GitError(Exception):
-    def __init__(self, cmd, args, kwargs, stderr=None, returncode = 0):
+    def __init__(self, cmd, args, kwargs, stderr=None, returncode=0):
         Exception.__init__(self)
         self.cmd = cmd
         self.args = args
@@ -68,14 +69,15 @@ class GitError(Exception):
     def __unicode__(self):
         errorMsg = "Git command failed"
         if self.returncode != 0:
-            errorMsg += "(%d)"%self.returncode
-        errorMsg += ": git %s %s"%(
-            self.cmd,' '.join(quote(s) for s in self.args))
+            errorMsg += "(%d)" % self.returncode
+        errorMsg += ": git %s %s" % (
+            self.cmd, ' '.join(quote(s) for s in self.args))
         if self.stderr:
-            errorMsg += " %s"%(self.stderr)
+            errorMsg += " %s" % (self.stderr)
         return errorMsg
 
-def __set_repo_environ(environ,repository):
+
+def __set_repo_environ(environ, repository):
     if repository is not None:
         git_dir = environ['GIT_DIR'] = repository
         if not os.path.isdir(git_dir):
@@ -84,11 +86,13 @@ def __set_repo_environ(environ,repository):
             if proc.wait() != 0:
                 raise GitError('init', [], {}, proc.stderr.read())
 
-def __set_worktree_environ(environ,worktree):
+
+def __set_worktree_environ(environ, worktree):
     if worktree is not None:
         environ['GIT_WORK_TREE'] = worktree
         if not os.path.isdir(worktree):
             os.makedirs(worktree)
+
 
 def git(cmd, *args, **kwargs):
     stdin_mode = None
@@ -96,7 +100,7 @@ def git(cmd, *args, **kwargs):
         stdin_mode = PIPE
 
     environ = os.environ.copy()
-    __set_repo_environ(environ,kwargs.get('repository'))
+    __set_repo_environ(environ, kwargs.get('repository'))
     __set_worktree_environ(environ, kwargs.get('worktree'))
 
     proc = Popen(('git', cmd) + args, env=environ,
@@ -104,21 +108,20 @@ def git(cmd, *args, **kwargs):
                  stdout=PIPE,
                  stderr=PIPE)
 
-    input = kwargs.get('input','')
-    if isinstance(input, str):
-        input = input.encode("utf-8")
-    out, err = proc.communicate(input)
+    input_str = kwargs.get('input', '')
+    if isinstance(input_str, str):
+        input_str = input_str.encode("utf-8")
+    out, err = proc.communicate(input_str)
 
     returncode = proc.returncode
-    restart = False
-    ignore_errors = kwargs.get('ignore_errors',False)
+    ignore_errors = kwargs.get('ignore_errors', False)
     if returncode != 0 and not ignore_errors:
-            raise GitError(cmd, args, kwargs, err, returncode)
+        raise GitError(cmd, args, kwargs, err, returncode)
 
     try:
-        retval = str(out,'utf-8')
+        retval = str(out, 'utf-8')
     except TypeError:
-        retval = unicode(out)
+        retval = unicode(out, 'utf-8')
 
     if 'keep_newline' not in kwargs:
         retval = retval[:-1]
@@ -138,7 +141,7 @@ class gitbook:
 
     def __repr__(self):
         return '<gitshelve.gitbook %s %s %s>' % \
-                (self.path, self.name, self.dirty)
+               (self.path, self.name, self.dirty)
 
     def get_data(self):
         if self.data is None:
@@ -164,11 +167,11 @@ class gitbook:
 
     def __getstate__(self):
         odict = self.__dict__.copy()  # copy the dict since we change it
-        del odict['dirty']            # remove dirty flag
+        del odict['dirty']  # remove dirty flag
         return odict
 
     def __setstate__(self, ndict):
-        self.__dict__.update(ndict)   # update attributes
+        self.__dict__.update(ndict)  # update attributes
         self.dirty = False
 
 
@@ -181,7 +184,7 @@ class gitshelve(dict):
     really want to use Pickling within a Git repository (it's not friendly to
     other Git users, nor does it support merging)."""
     ls_tree_pat = \
-            re.compile('((\d{6}) (tree|blob)) ([0-9a-f]{40})\t(start|(.+))$')
+        re.compile(r'((\d{6}) (tree|blob)) ([0-9a-f]{40})\t(start|(.+))$')
 
     head = None
     dirty = False
@@ -221,7 +224,7 @@ class gitshelve(dict):
             self.git('update-ref', 'refs/heads/%s' % self.branch, new_head)
         self.head = new_head
 
-    def __parse_ls_tree_line(self,treep,perm,name,path):
+    def __parse_ls_tree_line(self, treep, perm, name, path):
         parts = path.split(os.sep)
         d = self.objects
         for part in parts:
@@ -236,17 +239,18 @@ class gitshelve(dict):
                 d['__book__'] = self.book_type(self, path, name)
             else:
                 raise GitError('read_repository', [], {},
-                       'Invalid mode for %s : 100644 required, %s found' \
-                            % (path, perm))
+                               'Invalid mode for %s : ' +
+                               '100644 required, %s found'
+                               % (path, perm))
 
     def read_repository(self):
         self.init_data()
         try:
             self.head = self.current_head()
-        except:
+        except GitError:
             return
 
-        ls_tree = self.git('ls-tree', '--full-tree','-r', '-t', '-z', 
+        ls_tree = self.git('ls-tree', '--full-tree', '-r', '-t', '-z',
                            self.head).split('\0')
         for line in ls_tree:
             match = self.ls_tree_pat.match(line)
@@ -257,7 +261,7 @@ class gitshelve(dict):
             perm = match.group(2)
             name = match.group(4)
             path = match.group(5)
-            self.__parse_ls_tree_line(treep,perm,name,path)
+            self.__parse_ls_tree_line(treep, perm, name, path)
 
     def open(cls, branch='master', repository=None,
              keep_history=True, book_type=gitbook):
@@ -287,7 +291,7 @@ class gitshelve(dict):
 
             obj = objects[path]
             if not isinstance(obj, dict):
-                raise TypeError("objects['%s'] is not a dict"%path)
+                raise TypeError("objects['%s'] is not a dict" % path)
 
             if len(list(obj.keys())) == 1 and '__book__' in obj:
                 book = obj['__book__']
@@ -348,7 +352,7 @@ class gitshelve(dict):
     def close(self):
         if self.dirty:
             self.sync()
-        del self.objects        # free it up right away
+        del self.objects  # free it up right away
 
     def dump_objects(self, fd, indent=0, objects=None):
         if objects is None:
@@ -363,13 +367,13 @@ class gitshelve(dict):
         keys = list(objects.keys())
         keys.sort()
         for key in keys:
-            indent = self.processKeys(fd,indent,objects,key)
+            indent = self.processKeys(fd, indent, objects, key)
 
-    def processKeys(self,fd,indent,objects,key):
+    def processKeys(self, fd, indent, objects, key):
         if key == '__root__':
             return indent
         if not isinstance(objects[key], dict):
-            raise TypeError("objects['%s'] is not a dict"%key)
+            raise TypeError("objects['%s'] is not a dict" % key)
 
         if ('__book__' in objects[key]):
             book = objects[key]['__book__']
@@ -413,7 +417,7 @@ class gitshelve(dict):
         book = self.book_type(self, '__unknown__')
         book.data = data
         book.name = self.make_blob(book.serialize_data(book.data))
-        book.dirty = False      # the blob was just written!
+        book.dirty = False  # the blob was just written!
         book.path = '%s/%s' % (book.name[:2], book.name[2:])
 
         d = self.get_tree(book.path, make_dirs=True)
@@ -530,9 +534,9 @@ class gitshelve(dict):
         return v
 
     def __getstate__(self):
-        self.sync()                   # synchronize before persisting
+        self.sync()  # synchronize before persisting
         odict = self.__dict__.copy()  # copy the dict since we change it
-        del odict['dirty']            # remove dirty flag
+        del odict['dirty']  # remove dirty flag
         return odict
 
     def __setstate__(self, ndict):

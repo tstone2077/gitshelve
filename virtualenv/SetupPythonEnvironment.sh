@@ -33,17 +33,19 @@ if [ -z "$ENV_NAME" ];then
 fi
 echo Creating environment "$ENV_NAME" using $PYTHON_BIN ...
 python $SCRIPT_DIR/virtualenv.py -p "$PYTHON_BIN" $SCRIPT_DIR/"$ENV_NAME" || exit $?
-
 if [ ! -z $(echo $OS | grep -i "mingw") ]; then
     INTERMEDIATE_DIR=Scripts
 else
-    INTERMEDIATE_DIR=bin
+    if [ ! -z $(echo $OS | grep -i "Windows") ]; then
+        INTERMEDIATE_DIR=Scripts
+    else
+        INTERMEDIATE_DIR=bin
+    fi
 fi
 
 . "$SCRIPT_DIR/$ENV_NAME/$INTERMEDIATE_DIR/activate"
 
 #install packages
-export PIP_DOWNLOAD_CACHE=$SCRIPT_DIR/pip-cache
 pip install coverage==3.6 || exit $?
 echo Done creating environment "$ENV_NAME" using $PYTHON_BIN ...
 

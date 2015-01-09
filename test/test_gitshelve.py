@@ -9,52 +9,52 @@ import unittest
 
 try:
     from StringIO import StringIO
-except:
+except ImportError:
     from io import StringIO
 
-dirName = os.path.dirname(__file__)
-gitshelveDir = (os.path.abspath(os.path.join(dirName,'..','src')))
-if gitshelveDir not in sys.path:
-    sys.path.insert(0,gitshelveDir)
 import gitshelve
 
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 
-class t_gitshelve(unittest.TestCase):
-    def __init__(self,*args,**kwargs):
-        unittest.TestCase.__init__(self,*args,**kwargs)
+
+class TestGitShelve(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        unittest.TestCase.__init__(self, *args, **kwargs)
         try:
             self.assertRegex
         except AttributeError:
             self.assertRegex = self.assertRegexpMatches
-    def __add_file_to_repo(self,name,type='file'):
+
+    def __add_file_to_repo(self, name, file_type='file'):
         rootDir = self.gitDir
-        if type == 'dir':
-            rootDir = os.path.join(self.gitDir,name)
+        if file_type == 'dir':
+            rootDir = os.path.join(self.gitDir, name)
             os.makedirs(rootDir)
             name = '.empty'
 
-        filename = os.path.join(rootDir,name)
-        with open(filename,'w') as f:
+        filename = os.path.join(rootDir, name)
+        with open(filename, 'w') as f:
             f.write('temp')
-        stream = os.popen('git add %s'%filename)
+        stream = os.popen('git add %s' % filename)
         out = stream.read()
         stream.close()
-        self.assertEqual('',out)
+        self.assertEqual('', out)
         stream = os.popen('git commit -m temp')
         out = stream.read()
         stream.close()
         commitRE = re.compile('.* ([0-9a-f]{7}).*? temp')
-        self.assertIn('1 file changed, 1 insertion',out)
+        self.assertIn('1 file changed, 1 insertion', out)
         return commitRE.search(out).group(1)
-        
+
     def __use_new_repo(self):
-        self.gitDir = tempfile.mkdtemp()
-        self.lastCWD = os.getcwd()
+        self.gitDir = tempfile.mkdtemp()  # pylint: disable=W0201
+        self.lastCWD = os.getcwd()  # pylint: disable=W0201
         os.chdir(self.gitDir)
         stream = os.popen('git init')
-        self.assertIn("Initialized empty Git repository in",stream.read())
+        self.assertIn("Initialized empty Git repository in", stream.read())
         stream.close()
+        os.system('git config user.email "doe.j@example.com"')
+        os.system('git config user.name "John Doe"')
 
     def __cleanup_repo(self):
         """Delete the git repository"""
@@ -63,120 +63,125 @@ class t_gitshelve(unittest.TestCase):
         self.stream.close()
 
     def setUp(self):
-        """Create a new git repository, cd to it, and create the initial 
+        """Create a new git repository, cd to it, and create the initial
            commit"""
         self.__use_new_repo()
-        #add a file to our repository
+        # add a file to our repository
         self.firstCommit = self.__add_file_to_repo('file')
         self.stream = StringIO()
-        self.gitConfigFile = os.path.join(os.environ['HOME'],'.gitconfig')
-        #REVISIT:  This sucks! In order to force git init to fail, I have to 
-        #change the user's ~/.gitconfig file.  That means if the unit tests
-        #are aborted mid way through, the configuration can be lost.  There
-        #needs to be a better way to make git init fail.
+        self.gitConfigFile = os.path.join(os.environ['HOME'], '.gitconfig')
+        # REVISIT:  This sucks! In order to force git init to fail, I have to
+        # change the user's ~/.gitconfig file.  That means if the unit tests
+        # are aborted mid way through, the configuration can be lost.  There
+        # needs to be a better way to make git init fail.
         with open(self.gitConfigFile) as f:
             self.gitConfig = f.read()
 
     def tearDown(self):
         self.__cleanup_repo()
-        #make sure the user's git config file is the way it was before we found
-        #it
-        with open(self.gitConfigFile,'w') as f:
+        # make sure the user's git config file is the way it was before
+        # we found it
+        with open(self.gitConfigFile, 'w') as f:
             f.write(self.gitConfig)
 
     def testGitError(self):
         cmd = 'branch'
-        args = ['-D','test']
+        args = ['-D', 'test']
         kwargs = {}
         stderr = None
         returncode = 1
-        e = gitshelve.GitError(cmd,args,kwargs,stderr,returncode)
-        self.assertEqual(str(e),"Git command failed(1): git branch -D test")
+        e = gitshelve.GitError(cmd, args, kwargs, stderr, returncode)
+        self.assertEqual(str(e), "Git command failed(1): git branch -D test")
 
         cmd = 'branch'
-        args = ['-D','test']
+        args = ['-D', 'test']
         kwargs = {}
         stderr = "No branch for you"
         returncode = 1
-        e = gitshelve.GitError(cmd,args,kwargs,stderr,returncode)
-        self.assertEqual(str(e),"Git command failed(1): git branch -D test No"
-                                " branch for you")
+        e = gitshelve.GitError(cmd, args, kwargs, stderr, returncode)
+        self.assertEqual(str(e), "Git command failed(1): git branch -D test No"
+                                 " branch for you")
+
     def testGit(self):
-        #run with verbose turned on
+        # run with verbose turned on
         gitshelve.verbose = True
         with NoStdStreams():
-            self.assertEqual(gitshelve.git('branch','-a'),"* master")
+            self.assertEqual(gitshelve.git('branch', '-a'), "* master")
             tree = gitshelve.git('write-tree')
 
-        #test with input in kwargs
+        # test with input in kwargs
         stdIn = 'first commit'
-        result = ""
+
         with NoStdStreams():
-            result = gitshelve.git('commit-tree',tree,input = stdIn)
+            result = gitshelve.git('commit-tree', tree, input=stdIn)
 
-        self.assertRegex(result,'[0-9a-f]{40}')
+        self.assertRegex(result, '[0-9a-f]{40}')
 
-        #from now on, run with verbose turned off
+        # from now on, run with verbose turned off
         gitshelve.verbose = False
 
-        #test with repository in kwargs
+        # test with repository in kwargs
         #-----repo exists
         rootRepoName = tempfile.mkdtemp()
         with self.assertRaises(gitshelve.GitError):
-            gitshelve.git('ls-tree',repository = rootRepoName)
+            gitshelve.git('ls-tree', repository=rootRepoName)
         #-----repo does not exist
         #----------first, cause git init to fail
-        repoName = os.path.join(rootRepoName,"nonExistentRepo")
-        with open(self.gitConfigFile,'w') as f:
+        repoName = os.path.join(rootRepoName, "nonExistentRepo")
+        with open(self.gitConfigFile, 'w') as f:
             f.write("[push]\n\tdefault = trash")
         with self.assertRaises(gitshelve.GitError):
-            gitshelve.git('write-tree',repository = repoName)
+            gitshelve.git('write-tree', repository=repoName)
         shutil.rmtree(repoName)
         #----------fix config so git init won't fail
-        with open(self.gitConfigFile,'w') as f:
+        with open(self.gitConfigFile, 'w') as f:
             f.write(self.gitConfig)
-        tree = gitshelve.git('write-tree',repository = repoName)
-        self.assertRegex(tree,'[0-9a-f]{40}')
-        cwdTree = gitshelve.git('ls-tree',tree)
-        self.assertEqual('',cwdTree)
+        tree = gitshelve.git('write-tree', repository=repoName)
+        self.assertRegex(tree, '[0-9a-f]{40}')
+        cwdTree = gitshelve.git('ls-tree', tree)
+        self.assertEqual('', cwdTree)
         shutil.rmtree(rootRepoName)
 
-        #test with worktree in kwargs
+        # test with worktree in kwargs
         #-----repo exists
         rootRepoName = tempfile.mkdtemp()
-        out = gitshelve.git('checkout','master', worktree = rootRepoName)
-        self.assertEqual('D\tfile',out)
+        out = gitshelve.git('checkout', 'master', worktree=rootRepoName)
+        self.assertEqual('D\tfile', out)
         #-----repo does not exist
 
-        repoName = os.path.join(rootRepoName,'nonExistentRepo')
-        out = gitshelve.git('checkout','master', worktree = repoName, keep_newline = True)
-        self.assertEqual('D\tfile\n',out)
+        repoName = os.path.join(rootRepoName, 'nonExistentRepo')
+        out = gitshelve.git('checkout', 'master', worktree=repoName,
+                            keep_newline=True)
+        self.assertEqual('D\tfile\n', out)
         shutil.rmtree(rootRepoName)
 
     def testGitbook(self):
-        lsTreeRE = re.compile('(\d{6}) (tree|blob) ([0-9a-f]{40})\t(start|(.+))$')
-        tree = gitshelve.git('ls-tree','--full-tree','-r', '-t','master')
+        lsTreeRE = re.compile(r'(\d{6}) (tree|blob) ' +
+                              r'([0-9a-f]{40})\t(start|(.+))$')
+        tree = gitshelve.git('ls-tree', '--full-tree', '-r', '-t', 'master')
         name = lsTreeRE.match(tree).group(3)
         shelf = gitshelve.gitshelve()
         b = gitshelve.gitbook(shelf, self.gitDir, name=name)
         self.assertEqual(repr(b),
-                         '<gitshelve.gitbook %s %s False>'%(self.gitDir,name))
+                         '<gitshelve.gitbook %s %s False>' %
+                         (self.gitDir, name))
         data = 'temp'
-        self.assertEqual(data,b.get_data())
+        self.assertEqual(data, b.get_data())
         b.data = None
         b.name = None
         with self.assertRaises(ValueError):
             b.get_data()
         b.set_data(data)
-        self.assertEqual(data,b.get_data())
-        self.assertEqual(data,b.serialize_data(data))
-        self.assertEqual(data,b.deserialize_data(data))
+        self.assertEqual(data, b.get_data())
+        self.assertEqual(data, b.serialize_data(data))
+        self.assertEqual(data, b.deserialize_data(data))
         newData = 'text'
-        self.assertEqual(None,b.set_data(newData))
-        self.assertEqual(None,b.change_comment())
+        self.assertEqual(None, b.set_data(newData))
+        self.assertEqual(None, b.change_comment())
         b.__setstate__({'data': 'something'})
-        self.assertEqual(b.__getstate__(),{'shelf': {}, 'path': self.gitDir,
-                                           'data': 'something', 'name': None})
+        self.assertEqual(b.__getstate__(), {'shelf': {}, 'path': self.gitDir,
+                                            'data': 'something', 'name': None})
+
     #----gitshelve tests-------
     def testGitshelveInit(self):
         s = gitshelve.gitshelve()
@@ -184,40 +189,40 @@ class t_gitshelve(unittest.TestCase):
 
     def testGitshelveGit(self):
         s = gitshelve.gitshelve()
-        out = s.git('ls-tree','--full-tree','-r','-t','master')
+        out = s.git('ls-tree', '--full-tree', '-r', '-t', 'master')
         expectedOut = '100644 blob 3602361dafeea2cbec159128f5166a8428c0795c' + \
                       '\tfile'
-        self.assertEqual(expectedOut,out)
-        s.repository = os.path.join(self.gitDir,".git")
-        out = s.git('ls-tree','--full-tree','-r','-t','master')
-        self.assertEqual(expectedOut,out)
+        self.assertEqual(expectedOut, out)
+        s.repository = os.path.join(self.gitDir, ".git")
+        out = s.git('ls-tree', '--full-tree', '-r', '-t', 'master')
+        self.assertEqual(expectedOut, out)
         s.close()
 
     def testGitshelveCurrentHead(self):
         s = gitshelve.gitshelve()
         text = s.current_head()
-        self.assertRegex(text,self.firstCommit)
+        self.assertRegex(text, self.firstCommit)
         s.close()
 
     def testGitshelveUpdateHead(self):
         s = gitshelve.gitshelve()
-        #TODO: Figure out how to test this
+        # TODO: Figure out how to test this
         s.close()
 
     def testGitshelveReadRepository(self):
         s = gitshelve.gitshelve()
         s.read_repository()
-        #TODO: some verification that the repo was read
+        # TODO: some verification that the repo was read
 
-        #test using an empty repository.  This should return None.
+        # test using an empty repository.  This should return None.
         self.__cleanup_repo()
         self.__use_new_repo()
-        self.assertEqual(None,s.read_repository())
+        self.assertEqual(None, s.read_repository())
 
-        #test using a repository with at least one directory
-        self.__add_file_to_repo('newDir',type='dir')
+        # test using a repository with at least one directory
+        self.__add_file_to_repo('newDir', file_type='dir')
         s.read_repository()
-        #TODO: some verification that the repo was read
+        # TODO: some verification that the repo was read
         s.close()
 
     def testGitshelveHashBlob(self):
@@ -235,8 +240,8 @@ class t_gitshelve(unittest.TestCase):
         s.close()
 
     def testGitshelveMakeTree(self):
-        #TODO:This test is very clumsy.  Work can be done to build a meaningful
-        #tree
+        # TODO:This test is very clumsy. Work can be done to build a meaningful
+        # tree
         data = 'this is some data'
         s = gitshelve.gitshelve()
         name = s.make_blob(data)
@@ -248,10 +253,10 @@ class t_gitshelve(unittest.TestCase):
 
         b = gitshelve.gitbook(s, self.gitDir, name=name)
         b.dirty = True
-        objects['file'] = {'__book__':b}
+        objects['file'] = {'__book__': b}
         tree = s.make_tree(objects)
-        objects[tree] = {'file':{'__book__':b}}
-        newTree = s.make_tree(objects)
+        objects[tree] = {'file': {'__book__': b}}
+#        newTree = s.make_tree(objects)
         s.close()
 
     def testGitshelveMakeCommit(self):
@@ -261,8 +266,7 @@ class t_gitshelve(unittest.TestCase):
         objects = {}
         b = gitshelve.gitbook(s, self.gitDir, name=name)
         b.dirty = True
-        objects['file'] = {'__book__':b}
-        buf = StringIO()
+        objects['file'] = {'__book__': b}
         tree = s.make_tree(objects)
         comment = 'tree'
         s.make_commit(tree, comment)
@@ -272,8 +276,8 @@ class t_gitshelve(unittest.TestCase):
     def testGitshelveCommit(self):
         s = gitshelve.gitshelve()
         newHead = s.commit()
-        self.assertEqual(newHead,None)
-        self.assertEqual(newHead,s.commit())
+        self.assertEqual(newHead, None)
+        self.assertEqual(newHead, s.commit())
 
         s.dirty = True
         newHead = s.commit()
@@ -285,16 +289,16 @@ class t_gitshelve(unittest.TestCase):
         s.close()
 
     def testGitshelveGetParentIds(self):
-        #TODO: figure out more meaningful tests for this
+        # TODO: figure out more meaningful tests for this
         s = gitshelve.gitshelve()
-        self.assertEqual(s.get_parent_ids(),[])
+        self.assertEqual(s.get_parent_ids(), [])
         s.close()
 
     def testGitshelveClose(self):
         s = gitshelve.gitshelve()
         s.close()
         s = gitshelve.gitshelve()
-        s['a']='a'
+        s['a'] = 'a'
         s.close()
 
     def testGitshelveDumpObjects(self):
@@ -302,43 +306,43 @@ class t_gitshelve(unittest.TestCase):
         b = gitshelve.gitbook(s, self.gitDir, name='master')
         buf = StringIO()
         s.dump_objects(buf)
-        self.assertEqual("",buf.getvalue())
+        self.assertEqual("", buf.getvalue())
 
         s['temp'] = 'a'
         s.dump_objects(buf)
-        self.assertEqual("blob: temp\n",buf.getvalue())
+        self.assertEqual("blob: temp\n", buf.getvalue())
         buf = StringIO()
 
         objects = {}
-        #TODO: Fix this dictionary to store the correct values
-        objects['__root__'] = {'temp':'a'}
-        s.dump_objects(buf,0,objects)
-        self.assertEqual("tree {'temp': 'a'}\n",buf.getvalue())
+        # TODO: Fix this dictionary to store the correct values
+        objects['__root__'] = {'temp': 'a'}
+        s.dump_objects(buf, 0, objects)
+        self.assertEqual("tree {'temp': 'a'}\n", buf.getvalue())
         buf = StringIO()
 
         objects['file'] = 'temp'
         with self.assertRaises(TypeError):
-            s.dump_objects(buf,0,objects)
+            s.dump_objects(buf, 0, objects)
         buf = StringIO()
 
-        objects['file'] = {'__root__':'someTree'}
-        s.dump_objects(buf,0,objects)
-        expectedOutput =  "tree {'temp': 'a'}\n  tree someTree: file\n"
-        self.assertEqual(expectedOutput,buf.getvalue())
+        objects['file'] = {'__root__': 'someTree'}
+        s.dump_objects(buf, 0, objects)
+        expectedOutput = "tree {'temp': 'a'}\n  tree someTree: file\n"
+        self.assertEqual(expectedOutput, buf.getvalue())
         buf = StringIO()
 
-        objects['file'] = {'file':{'__book__':b}}
-        s.dump_objects(buf,0,objects)
-        expectedOutput = "tree {'temp': 'a'}\n" +\
-                         "  tree: file\n" +\
+        objects['file'] = {'file': {'__book__': b}}
+        s.dump_objects(buf, 0, objects)
+        expectedOutput = "tree {'temp': 'a'}\n" + \
+                         "  tree: file\n" + \
                          "    blob master: file\n"
-        self.assertEqual(expectedOutput,buf.getvalue())
+        self.assertEqual(expectedOutput, buf.getvalue())
         buf = StringIO()
 
-        objects['file'] = {'__book__':b}
-        s.dump_objects(buf,0,objects)
+        objects['file'] = {'__book__': b}
+        s.dump_objects(buf, 0, objects)
         expectedOutput = "tree {'temp': 'a'}\n  blob master: file\n"
-        self.assertEqual(expectedOutput,buf.getvalue())
+        self.assertEqual(expectedOutput, buf.getvalue())
         s.close()
 
     def testGitshelveGetTree(self):
@@ -346,23 +350,23 @@ class t_gitshelve(unittest.TestCase):
         with self.assertRaises(KeyError):
             s.get_tree('temp', make_dirs=False)
         s['a/b'] = 'c'
-        self.assertIn('b',s.get_tree('a'))
+        self.assertIn('b', s.get_tree('a'))
         s.close()
 
     def testGitshelveGetAndSetItem(self):
         s = gitshelve.gitshelve()
         with self.assertRaises(KeyError):
-            s['temp']
+            _ = s['temp']
         s['temp'] = 'a'
-        self.assertEqual('a',s['temp'])
+        self.assertEqual('a', s['temp'])
         s.close()
 
     def testGitshelvePruneTree(self):
         s = gitshelve.gitshelve()
         s['temp/temp'] = 'temp'
         s['temp/temp2'] = 'temp'
-        b = gitshelve.gitbook(s, self.gitDir, name='master')
-        s.prune_tree(s.objects,['temp','temp2'])
+        gitshelve.gitbook(s, self.gitDir, name='master')
+        s.prune_tree(s.objects, ['temp', 'temp2'])
         s.close()
 
     def testGitshelveDelItem(self):
@@ -377,11 +381,11 @@ class t_gitshelve(unittest.TestCase):
     def testGitshelveContains(self):
         s = gitshelve.gitshelve()
         s['temp/temp'] = 'temp'
-        self.assertEqual(True,'temp/temp' in s)
+        self.assertEqual(True, 'temp/temp' in s)
         s.close()
 
     def testGitshelveWalker(self):
-        #TODO: Figure out how to test this better
+        # TODO: Figure out how to test this better
         pass
 
     def testGitshelveItems(self):
@@ -389,15 +393,15 @@ class t_gitshelve(unittest.TestCase):
         s['temp'] = 'temp'
         s['temp2'] = 'temp'
         s['temp3'] = 'temp'
-        i = s.items()
+        # i = s.items()
         s.close()
-        
+
     def testGitshelveValues(self):
         s = gitshelve.gitshelve()
         s['temp'] = 'temp'
         s['temp2'] = 'temp'
         s['temp3'] = 'temp'
-        v = s.values()
+        # v = s.values()
         s.close()
 
     def testGitshelveKeys(self):
@@ -405,7 +409,6 @@ class t_gitshelve(unittest.TestCase):
         s['temp'] = 'temp'
         s['temp2'] = 'temp'
         s['temp3'] = 'temp'
-        k = s.keys()
         s.close()
 
     def testGitshelveGetAndSetState(self):
@@ -416,14 +419,14 @@ class t_gitshelve(unittest.TestCase):
         s['temp3'] = 'temp'
         sStr = pickle.dumps(s)
         s = pickle.loads(sStr)
-        #change the head
+        # change the head
         s['temp4'] = 'temp'
         s.commit()
         s = pickle.loads(sStr)
         s.close()
 
     def testOpen(self):
-        s = gitshelve.open()
+        gitshelve.open()
 
     def testBasicInsertion(self):
         shelf = gitshelve.open('test')
@@ -487,11 +490,11 @@ class t_gitshelve(unittest.TestCase):
         self.assertEqual(hash1, hash3)
 
         commit = gitshelve.git('cat-file', 'commit', 'test',
-                               keep_newline = True)
+                               keep_newline=True)
         self.assertTrue(re.search('first\n$', commit))
 
         data = gitshelve.git('cat-file', 'blob', 'test:foo/bar/baz.c',
-                             keep_newline = True)
+                             keep_newline=True)
         self.assertEqual(text, data)
 
         del shelf
@@ -570,7 +573,7 @@ path: (foo/bar/baz1.c)
         self.assertEqual(text, shelf['foo/bar/baz1.c'])
         self.assertEqual(text, shelf['foo/bar/baz2.c'])
 
-        log = gitshelve.git('log', 'test', keep_newline = True)
+        log = gitshelve.git('log', 'test', keep_newline=True)
 
         self.assertTrue(re.match("""commit [0-9a-f]{40}
 Author: .+
@@ -584,7 +587,7 @@ Date:   .+
     def testDetachedRepo(self):
         repotest = os.path.join(self.gitDir, 'repo-test')
         repotestclone = os.path.join(self.gitDir, 'repo-test-clone')
-        shelf = gitshelve.open(repository = repotest)
+        shelf = gitshelve.open(repository=repotest)
         text = "Hello, world!\n"
         shelf['foo.txt'] = text
 
@@ -612,13 +615,13 @@ Date:   .+
                 shutil.rmtree(repotest)
 
     def testBlobStore(self):
-        blobpath = None
         """Test use a gitshelve as a generic blob store."""
+        blobpath = None
         try:
             blobpath = os.path.join(self.gitDir, 'blobs')
-            shelf = gitshelve.open(repository = blobpath, keep_history = False)
+            shelf = gitshelve.open(repository=blobpath, keep_history=False)
             text = "This is just some sample text.\n"
-            hash = shelf.put(text)
+            commit_hash = shelf.put(text)
 
             buf = StringIO()
             shelf.dump_objects(buf)
@@ -626,7 +629,7 @@ Date:   .+
   blob acd291ce81136338a729a30569da2034d918e057: d291ce81136338a729a30569da2034d918e057
 """, buf.getvalue())
 
-            self.assertEqual(text, shelf.get(hash))
+            self.assertEqual(text, shelf.get(commit_hash))
 
             shelf.sync()
             buf = StringIO()
@@ -637,14 +640,14 @@ Date:   .+
 """, buf.getvalue())
             del shelf
 
-            shelf = gitshelve.open(repository = blobpath, keep_history = False)
+            shelf = gitshelve.open(repository=blobpath, keep_history=False)
             buf = StringIO()
             shelf.dump_objects(buf)
             self.assertEqual("""tree 6c6167149ccc5bf60892b65b84322c1943f5f7da: ac
   blob acd291ce81136338a729a30569da2034d918e057: d291ce81136338a729a30569da2034d918e057
 """, buf.getvalue())
 
-            self.assertEqual(text, shelf.get(hash))
+            self.assertEqual(text, shelf.get(commit_hash))
             del shelf
         finally:
             if blobpath and os.path.isdir(blobpath):
@@ -652,13 +655,13 @@ Date:   .+
 
 
 class NoStdStreams(object):
-    def __init__(self,stdout = None, stderr = None):
-        self.devnull = open(os.devnull,'w')
+    def __init__(self, stdout=None, stderr=None):
+        self.devnull = open(os.devnull, 'w')
         self._stdout = stdout or self.devnull or sys.stdout
         self._stderr = stderr or self.devnull or sys.stderr
 
     def __enter__(self):
-        self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
+        self.old_stdout, self.old_stderr = sys.stdout, sys.stderr  # pylint: disable=attribute-defined-outside-init
         self.old_stdout.flush()
         self.old_stderr.flush()
         sys.stdout, sys.stderr = self._stdout, self._stderr
