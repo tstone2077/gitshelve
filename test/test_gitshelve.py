@@ -51,6 +51,8 @@ class TestGitShelve(unittest.TestCase):
         stream = os.popen('git init')
         self.assertIn("Initialized empty Git repository in",stream.read())
         stream.close()
+        os.system('git config user.email "doe.j@example.com"')
+        os.system('git config user.name "John Doe"')
 
     def __cleanup_repo(self):
         """Delete the git repository"""

@@ -30,16 +30,17 @@
 # If you checkout the 'mydata' branch now, you'll see the file 'git.c' in the
 # directory 'foo/bar'.  Running 'git log' will show the change you made.
 
-import re
 import os
 from pipes import quote
+import re
+from subprocess import Popen, PIPE
+
 
 try:
     from StringIO import StringIO
 except:
     from io import StringIO
 
-from subprocess import Popen, PIPE
 
 ######################################################################
 
@@ -118,7 +119,7 @@ def git(cmd, *args, **kwargs):
     try:
         retval = str(out,'utf-8')
     except TypeError:
-        retval = unicode(out)
+        retval = unicode(out, 'utf-8')
 
     if 'keep_newline' not in kwargs:
         retval = retval[:-1]

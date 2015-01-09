@@ -3,3 +3,4 @@
 tests/coverage.xml
 virtualenv/py*
 sonar-project.properties
+gitshelve.egg-info/
