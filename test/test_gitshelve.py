@@ -69,20 +69,9 @@ class TestGitShelve(unittest.TestCase):
         # add a file to our repository
         self.firstCommit = self.__add_file_to_repo('file')
         self.stream = StringIO()
-        self.gitConfigFile = os.path.join(os.environ['HOME'], '.gitconfig')
-        # REVISIT:  This sucks! In order to force git init to fail, I have to
-        # change the user's ~/.gitconfig file.  That means if the unit tests
-        # are aborted mid way through, the configuration can be lost.  There
-        # needs to be a better way to make git init fail.
-        with open(self.gitConfigFile) as f:
-            self.gitConfig = f.read()
 
     def tearDown(self):
         self.__cleanup_repo()
-        # make sure the user's git config file is the way it was before
-        # we found it
-        with open(self.gitConfigFile, 'w') as f:
-            f.write(self.gitConfig)
 
     def testGitError(self):
         cmd = 'branch'
@@ -108,6 +97,16 @@ class TestGitShelve(unittest.TestCase):
         with NoStdStreams():
             self.assertEqual(gitshelve.git('branch', '-a'), "* master")
             tree = gitshelve.git('write-tree')
+
+        # Get the original content of the user's .gitconfig, since we need
+        # to edit it.
+        self.gitConfigFile = os.path.join(os.environ['HOME'], '.gitconfig')
+        # REVISIT:  This sucks! In order to force git init to fail, I have to
+        # change the user's ~/.gitconfig file.  That means if the unit tests
+        # are aborted mid way through, the configuration can be lost.  There
+        # needs to be a better way to make git init fail.
+        with open(self.gitConfigFile) as f:
+            self.gitConfig = f.read()
 
         # test with input in kwargs
         stdIn = 'first commit'
@@ -154,6 +153,10 @@ class TestGitShelve(unittest.TestCase):
                             keep_newline=True)
         self.assertEqual('D\tfile\n', out)
         shutil.rmtree(rootRepoName)
+
+        # restore the user's git config file to the way it was before
+        with open(self.gitConfigFile, 'w') as f:
+            f.write(self.gitConfig)
 
     def testGitbook(self):
         lsTreeRE = re.compile(r'(\d{6}) (tree|blob) ' +
