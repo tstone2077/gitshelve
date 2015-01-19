@@ -30,6 +30,8 @@
 # If you checkout the 'mydata' branch now, you'll see the file 'git.c' in the
 # directory 'foo/bar'.  Running 'git log' will show the change you made.
 
+GITSHELVE_VERSION="0.1.0"
+
 import os
 from pipes import quote
 import re

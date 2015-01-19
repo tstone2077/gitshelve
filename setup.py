@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 from __future__ import print_function
+from gitshelve import GITSHELVE_VERSION
 
 import os.path
 from setuptools import setup
@@ -11,8 +12,8 @@ def read(fname):
 
 
 setup(name='gitshelve',
-      version='0.0.0',
-      author="John Wiegley, Thurston",
+      version=GITSHELVE_VERSION,
+      author="John Wiegley, Thurston Stone",
       description='Python object for easily writing scripts that store arbitrary data inside a Git repository.',
       long_description=read('README.md'),
       url='https://github.com/tstone2077/gitshelve',
