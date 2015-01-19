@@ -53,8 +53,12 @@ class TestGitShelve(unittest.TestCase):
         stream = os.popen('git init')
         self.assertIn("Initialized empty Git repository in", stream.read())
         stream.close()
-        os.system('git config user.email "doe.j@example.com"')
-        os.system('git config user.name "John Doe"')
+        # use environment variables to set author and committer.
+        # using the config didn't work in travis-ci.org.
+        os.environ["GIT_AUTHOR_NAME"] = "John Doe"
+        os.environ["GIT_AUTHOR_EMAIL"] = "doe.j@example"
+        os.environ["GIT_COMMITTER_NAME"] = "John Doe"
+        os.environ["GIT_COMMITTER_EMAIL"] = "doe.j@example"
 
     def __cleanup_repo(self):
         """Delete the git repository"""
