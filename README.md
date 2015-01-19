@@ -1,5 +1,5 @@
 [![Build
-Status](https://travis-ci.org/mcepl/gitshelve.svg?branch=cleanup)](https://travis-ci.org/mcepl/gitshelve)
+Status](https://travis-ci.org/tstone2077/gitshelve.svg?branch=feature/unit_test_fixing)](https://travis-ci.org/tstone2077/gitshelve)
 
 
 Originally branched from https://github.com/duplys/git-issues
