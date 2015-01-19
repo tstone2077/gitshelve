@@ -1,6 +1,6 @@
 [![Build
 Status](https://travis-ci.org/tstone2077/gitshelve.svg?branch=feature/unit_test_fixing)](https://travis-ci.org/tstone2077/gitshelve)
-
+[![Coverage Status](https://coveralls.io/repos/tstone2077/gitshelve/badge.svg?branch=feature%2Funit_test_fixing)](https://coveralls.io/r/tstone2077/gitshelve?branch=feature%2Funit_test_fixing)
 
 Originally branched from https://github.com/duplys/git-issues
 
