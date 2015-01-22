@@ -5,7 +5,10 @@ import re
 import shutil
 import sys
 import tempfile
-import unittest
+try:
+    import unittest2 as unittest
+except ImportError:
+    import unittest
 
 try:
     from StringIO import StringIO
