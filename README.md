@@ -1,6 +1,6 @@
 [![Build
-Status](https://travis-ci.org/mcepl/gitshelve.svg?branch=cleanup)](https://travis-ci.org/mcepl/gitshelve)
-
+Status](https://travis-ci.org/tstone2077/gitshelve.svg?branch=develop)](https://travis-ci.org/tstone2077/gitshelve)
+[![Coverage Status](https://coveralls.io/repos/tstone2077/gitshelve/badge.svg?branch=develop)](https://coveralls.io/r/tstone2077/gitshelve?branch=feature%2Fdevelop)
 
 Originally branched from https://github.com/duplys/git-issues
 
